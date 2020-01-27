@@ -1,0 +1,38 @@
+{
+  "name": "tasks",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start:dev": "webpack-dev-server --mode development",
+    "build:dev": "webpack --mode development",
+    "build": "webpack --mode production",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "santistebanc <santistebanc94@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.8.3",
+    "@babel/plugin-proposal-class-properties": "^7.8.3",
+    "@babel/preset-env": "^7.8.3",
+    "babel-eslint": "^11.0.0-beta.2",
+    "babel-loader": "^8.0.6",
+    "html-webpack-plugin": "^3.2.0",
+    "preact-cli": "^2.2.1",
+    "threads-plugin": "^1.2.0",
+    "webpack": "^4.20.2",
+    "webpack-cli": "^3.1.1",
+    "webpack-dev-server": "^3.1.4"
+  },
+  "dependencies": {
+    "@babel/plugin-transform-react-jsx": "^7.8.3",
+    "css-loader": "^3.4.2",
+    "observable-fns": "^0.5.0",
+    "preact": "^10.2.1",
+    "preact-render-to-string": "^5.1.4",
+    "style-loader": "^1.1.3",
+    "threads": "^1.0.2",
+    "tiny-worker": "^2.3.0",
+    "uikit": "^3.3.0",
+    "webpack-modules": "^1.0.0"
+  }
+}

@@ -1,6 +1,0 @@
-FIRST VERSION
-Todo:
-  ☐ make tasks mid-execution cancellable (not just through terminate)
-  ☐ upload to github
-  ☐ create demo
-  ☐ create unit tests

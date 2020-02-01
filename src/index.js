@@ -1,80 +1,148 @@
-import { spawn, Pool as ThreadPool, Worker } from "threads";
-
+import { spawn, Pool as ThreadPool, Worker as ThreadWorker } from "threads";
+import { Subject } from "threads/observable";
+import { Observable } from "observable-fns";
 export class Pool {
   tasks = new Set();
   constructor(options) {
     this.options = options;
+    this.subject = new Subject();
     this.reset(options);
   }
-  reset(options) {
-    this.pool = ThreadPool(() => spawn(new Worker("./example")), options);
+  getObservable() {
+    return Observable.from(this.subject);
+  }
+  async reset({ worker, concurrency, maxQueuedJobs, name, size } = {}) {
+    this.pool = ThreadPool(() => spawn(worker), {
+      concurrency,
+      maxQueuedJobs,
+      name,
+      size
+    });
+    console.log("reseted", this.pool);
+    this.subject.next(this.tasks);
     return this;
   }
   createTask(name) {
     const task = new Task(this.pool, name);
     this.tasks.add(task);
+    this.subject.next(this.tasks);
+    task.getObservable().subscribe(_ => this.subject.next(this.tasks));
     return task;
   }
-  cancelAllQueued() {
+  cancelAllNotRunning() {
     this.tasks.forEach(task => {
-      task.cancel();
+      task.cancelIfNotRunning();
     });
     return this;
   }
-  cancelAll(force) {
-    this.pool.terminate(force);
+  cancelAll() {
     this.tasks.forEach(task => {
-      task.status = "cancelled";
+      task.forceCancel();
     });
-    console.log("pool terminated");
-    this.reset(this.options);
+    return this;
+  }
+  terminate(force) {
+    this.tasks.forEach(task => {
+      task.forceCancel();
+    });
+    this.tasks.clear();
+    this.subject.next(this.tasks);
+    this.pool.terminate(force).then(_ => {
+      console.log("pool terminated");
+      this.reset(this.options);
+    });
     return this;
   }
 }
 
-export class Task {
+class Task {
+  freeWorker = () => {};
   constructor(pool, name) {
     this.pool = pool;
-    this.status = "unscheduled";
-    this.progress = 0;
     this.name = name;
+    this.progress = 0;
+    this.status = "unscheduled";
+    this.subject = new Subject();
   }
-  start() {
-    this.job = this.pool.queue(worker => {
-      this.status = "queued";
-      this.observable = worker();
-      this.observable.subscribe({
-        next: info => {
-          this.progress = info.progress;
+  getObservable() {
+    return Observable.from(this.subject);
+  }
+  async start() {
+    if (!this.worker) {
+      try {
+        this.status = "queued";
+        this.job = this.pool.queue(async worker => {
+          this.wasCancelled = false;
           this.status = "running";
-          console.log("progress of ", this.name, " is: ", info.progress);
-        },
-        error: err => {
-          this.fail(err);
-        },
-        complete: () => {
-          this.finish();
-        }
-      });
-    });
-    return this;
-  }
-  cancel() {
-    if (this.status !== "running" && this.job) {
-      this.status = "cancelled";
-      this.job.cancel();
-      return true;
+          this.worker = worker;
+          this.idInWorker = await worker.startNewTask();
+          this.subject.next(this.status);
+          worker.getObservable(this.idInWorker).subscribe({
+            next: ({ progress, cancelled }) => {
+              if (typeof progress !== "undefined") {
+                this.progress = progress;
+                this.subject.next(this.status);
+              } else if (cancelled) {
+                this.wasCancelled = true;
+              }
+            },
+            error: err => {
+              console.log(`Finished with error: ${err}`, this.name);
+              this.freeWorker();
+              this.status = "failed";
+              this.subject.next(this.status);
+            },
+            complete: () => {
+              if (this.wasCancelled) {
+                console.log("Cancelled", this.name);
+                this.status = "cancelled";
+              } else {
+                console.log("Finished", this.name);
+                this.status = "finished";
+              }
+              this.freeWorker();
+              this.subject.next(this.status);
+            }
+          });
+          this.subject.next(this.status);
+          await new Promise(resolve => (this.freeWorker = resolve));
+        });
+      } catch (err) {
+        console.error(err);
+        this.status = "failed";
+        this.subject.next(this.status);
+        return this;
+      }
     }
-    return false;
-  }
-  fail(err) {
-    this.status = "failed";
-    console.log(`Finished with error: ${err}`, this.name);
     return this;
   }
-  finish() {
-    this.status = "finished";
-    console.log("Finished", this.name);
+  cancelIfNotRunning() {
+    if (this.job && !this.worker) {
+      this.job.cancel();
+      this.status = "cancelled";
+      this.subject.next(this.status);
+    }
+    return this;
+  }
+  forceCancel() {
+    if (this.worker) {
+      this.worker.cancelTask(this.idInWorker);
+    } else if (this.job) {
+      this.freeWorker();
+      this.job.cancel();
+      this.status = "cancelled";
+      this.subject.next(this.status);
+    }
+    return this;
+  }
+  forceFail(err) {
+    this.worker.failTask(this.idInWorker, err);
+    return this;
+  }
+  forceFinish() {
+    this.worker.finish();
     return this;
   }
 }
+
+export const Worker = ThreadWorker;

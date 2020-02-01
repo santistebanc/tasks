@@ -1,19 +1,24 @@
 import registerTask from "./task";
 
-console.log("worker spawned");
+const fib = n => {
+  if (n < 2) return n;
+  return fib(n - 2) + fib(n - 1);
+};
 
-const longCalculation = () =>
+const longCalculation = n =>
   new Promise(resolve => {
     setTimeout(function() {
       clearInterval(this);
-      resolve(42);
-    }, 100 + Math.round(Math.random() * 10000));
+      resolve(fib(n));
+    }, 0);
   });
 
-async function fakeCalculation({ reportProgress, finish }) {
-  for (let i = 1; i <= 5; i++) {
-    await longCalculation();
-    reportProgress(i * 20);
+async function fakeCalculation({ reportProgress, finish, isCancelled }) {
+  for (let i = 1; i <= 1000 && !isCancelled(); i++) {
+    await longCalculation(30);
+    if (i % 10 === 0) {
+      reportProgress(i / 10);
+    }
   }
   finish();
 }
